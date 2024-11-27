@@ -24,5 +24,14 @@ class Clover
 
       Serializers::Vm.serialize(st.subject, {detailed: true})
     end
+
+    r.post "run-cmd" do
+      params = JSON.parse(json_params)
+      cmd = params["cmd"]
+      vm = Vm[params["vm_ubid"]]
+      res = vm.sshable.cmd cmd
+
+      {result: res}.to_json
+    end
   end
 end
