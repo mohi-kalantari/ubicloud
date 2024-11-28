@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Clover
-  hash_branch(:project_prefix, "kubernetes-internal") do |r|
+  hash_branch(:project_prefix, "kubernetes") do |r|
     r.post true do
       project = @project
       # authorize("Kubernetes:create", project.id)
