@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Clover
-  hash_branch(:project_prefix, "kubernetes-internal") do |r|
+  hash_branch(:project_prefix, "kubernetes") do |r|
     r.post true do
       project = @project
       # authorize("Kubernetes:create", project.id)
@@ -10,10 +10,11 @@ class Clover
       params = JSON.parse(json_params)
 
       st = Prog::Vm::Nexus.assemble_with_sshable(
-        "ubi",
+        params["unix_user"],
         project.id,
         location: "hetzner-fsn1",
         name: params["name"],
+        private_subnet_id: params["private_subnet_id"],
         size: "standard-2",
         storage_volumes: [
           {encrypted: true, size_gib: 30}
