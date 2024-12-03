@@ -76,6 +76,7 @@ class LoadBalancer < Sequel::Model
   end
 
   def need_certificates?
+    # return false unless dns_zone
     return true if certs_dataset.empty?
 
     certs_dataset.where { created_at > Time.now - 60 * 60 * 24 * 30 * 2 }.empty?
