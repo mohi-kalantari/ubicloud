@@ -1968,6 +1968,52 @@ paths:
           $ref: '#/components/responses/Error'
       tags:
         - KubernetesVM
+    get:
+      operationId: getKubernetesVMDetails
+      summary: Get details of a specific Kubernetes VM in a location
+      responses:
+        '200':
+          description: Details of the kubernetes VM
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VmDetailed'
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - KubernetesVM
+  '/project/{project_id}/location/{location}/kubernetes-vm':
+    get:
+      operationId: listLocationKubernetesVMs
+      summary: List Kubernetes VMs in a specific location of a project
+      parameters:
+        - $ref: '#/components/parameters/location'
+        - $ref: '#/components/parameters/project_id'
+        - $ref: '#/components/parameters/start_after'
+        - $ref: '#/components/parameters/page_size'
+        - $ref: '#/components/parameters/order_column'
+      responses:
+        '200':
+          description: A list of Kuberentes VMs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Vm'
+                additionalProperties: false
+                required:
+                  - count
+                  - items
+        default:
+          $ref: '#/components/responses/Error'
+      tags:
+        - KubernetesVM
 components:
   parameters:
     firewall_id:
@@ -2243,7 +2289,7 @@ components:
             vms:
               type: array
               items:
-                $ref: '#/components/schemas/Vm'
+                type: string
           additionalProperties: false
           required:
             - location
