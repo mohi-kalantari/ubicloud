@@ -131,7 +131,16 @@ BASH
   end
 
   label def install_cni
-    current_vm.sshable.cmd("sudo ln -s /home/#{current_vm.sshable.unix_user}/kubernetes/bin/ubicni /opt/cni/bin/ubicni")
+    script = <<BASH_SCRIPT
+#!/bin/bash
+cd /home/ubi || {
+    echo "Failed to change directory to /home/ubi" >&2
+    exit 1
+}
+exec ./kubernetes/bin/ubicni
+BASH_SCRIPT
+    current_vm.sshable.cmd("sudo tee -a /opt/cni/bin/ubicni", stdin: script)
+    current_vm.sshable.cmd("sudo chmod +x /opt/cni/bin/ubicni")
     cni_config = <<CONFIG
 {
 "cniVersion": "1.0.0",
