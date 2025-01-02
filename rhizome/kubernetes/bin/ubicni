@@ -66,19 +66,19 @@ class UBICNI
   end
 
   def handle_add
-    subnet_ula_ipv6 = @stdin_data["ranges"]["subnet_ula_ipv6"]
-    subnet_ipv6 = @stdin_data["ranges"]["subnet_ipv6"]
+    # subnet_ula_ipv6 = @stdin_data["ranges"]["subnet_ula_ipv6"]
+    # subnet_ipv6 = @stdin_data["ranges"]["subnet_ipv6"]
     subnet_ipv4 = @stdin_data["ranges"]["subnet_ipv4"]
 
     container_id = ENV["CNI_CONTAINERID"]
     cni_netns = ENV["CNI_NETNS"].sub("/var/run/netns/", "")
 
     inner_mac = gen_mac.shellescape
-    inner_link_local = mac_to_ipv6_link_local(inner_mac)
+    # inner_link_local = mac_to_ipv6_link_local(inner_mac)
     inner_ifname = ENV["CNI_IFNAME"]
 
-    outer_mac = gen_mac.shellescape
-    outer_link_local = mac_to_ipv6_link_local(outer_mac)
+    # outer_mac = gen_mac.shellescape
+    # outer_link_local = mac_to_ipv6_link_local(outer_mac)
     outer_ifname = "veth_#{container_id[0, 8]}"
 
     FileUtils.mkdir_p("/etc/netns/#{cni_netns}")
@@ -89,13 +89,20 @@ options ndots:5
     EOF
     File.write("/etc/netns/#{cni_netns}/resolv.conf", dns_config)
 
-    r "ip link add #{outer_ifname} addr #{outer_mac} type veth peer name #{inner_ifname} addr #{inner_mac} netns #{cni_netns}"
+    # r "ip link add #{outer_ifname} addr #{outer_mac} type veth peer name #{inner_ifname} addr #{inner_mac} netns #{cni_netns}"
 
-    container_ipv6 = setup_ipv6(subnet_ipv6, inner_link_local, outer_link_local, cni_netns, inner_ifname, outer_ifname, setup_default_route: true)
-    container_ula_ipv6 = setup_ipv6(subnet_ula_ipv6, inner_link_local, outer_link_local, cni_netns, inner_ifname, outer_ifname)
+    r "ip link add #{inner_ifname} link ens3 type macvlan mode bridge"
+    r "ip link set #{inner_ifname} netns #{cni_netns}"
+
+    # r "ip link add #{inner_ifname} link ens3 type ipvlan mode l3"
+    # r "ip link set #{inner_ifname} netns #{cni_netns}"
+
+    # container_ipv6 = setup_ipv6(subnet_ipv6, inner_link_local, outer_link_local, cni_netns, inner_ifname, outer_ifname, setup_default_route: true)
+    # container_ula_ipv6 = setup_ipv6(subnet_ula_ipv6, inner_link_local, outer_link_local, cni_netns, inner_ifname, outer_ifname)
     ipv4_ips = setup_ipv4(subnet_ipv4, cni_netns, inner_ifname, outer_ifname)
 
-    @ipam_store["allocated_ips"][container_id] = [ipv4_ips[:container_ip].to_s, container_ula_ipv6.to_s, container_ipv6.to_s]
+    @ipam_store["allocated_ips"][container_id] = [ipv4_ips[:container_ip].to_s]
+    # @ipam_store["allocated_ips"][container_id] = [ipv4_ips[:container_ip].to_s, container_ula_ipv6.to_s, container_ipv6.to_s]
     save_state
 
     response = {
@@ -110,19 +117,19 @@ options ndots:5
       ips: [
         {
           address: ipv4_ips[:container_ip].to_s,
-          gateway: ipv4_ips[:gateway_ip].to_s,
-          interface: 0
-        },
-        {
-          address: container_ula_ipv6.to_s,
-          gateway: outer_link_local,
-          interface: 0
-        },
-        {
-          address: container_ipv6.to_s,
-          gateway: outer_link_local,
+          # gateway: ipv4_ips[:gateway_ip].to_s,
           interface: 0
         }
+        # {
+        #   address: container_ula_ipv6.to_s,
+        #   gateway: outer_link_local,
+        #   interface: 0
+        # },
+        # {
+        #   address: container_ipv6.to_s,
+        #   gateway: outer_link_local,
+        #   interface: 0
+        # }
       ],
       routes: [
         {
@@ -154,7 +161,35 @@ options ndots:5
     "#{container_ip}/#{container_ip.prefix}"
   end
 
+  def setup_ipv4_ipvlan(subnet, cni_netns, inner_ifname, outer_ifname)
+    container_ip = find_random_available_ip(IPAddr.new(subnet))
+
+    gateway_ip = IPAddr.new(subnet).to_s
+
+    r "ip -n #{cni_netns} addr add #{container_ip}/16 dev #{inner_ifname}"
+    r "ip -n #{cni_netns} link set #{inner_ifname} mtu #{@mtu} up"
+    r "ip -n #{cni_netns} route add default via #{gateway_ip}"
+
+    r "ip -n #{cni_netns} neigh add #{gateway_ip} lladdr $(cat /sys/class/net/ens3/address) dev #{inner_ifname}"
+    r "ip neigh add #{container_ip} lladdr $(ip netns exec #{cni_netns} cat /sys/class/net/#{inner_ifname}/address) dev ens3"
+
+    r "sysctl -w net.ipv4.conf.ens3.proxy_arp=1"
+
+    {container_ip: "#{container_ip}/#{container_ip.prefix}"}
+  end
+
   def setup_ipv4(subnet, cni_netns, inner_ifname, outer_ifname)
+    container_ip = find_random_available_ip(IPAddr.new(subnet))
+
+    r "ip -n #{cni_netns} addr add #{container_ip}/16 dev #{inner_ifname}"
+    r "ip -n #{cni_netns} link set #{inner_ifname} mtu #{@mtu} up"
+    # r "ip netns exec #{cni_netns} echo 1 > /proc/sys/net/ipv4/conf/#{inner_ifname}/proxy_arp"
+    r "ip neigh add #{container_ip} lladdr $(ip netns exec #{cni_netns} cat /sys/class/net/#{inner_ifname}/address) dev ens3"
+
+    {container_ip: "#{container_ip}/#{container_ip.prefix}"}
+  end
+
+  def setup_ipv4_veth(subnet, cni_netns, inner_ifname, outer_ifname)
     container_ip = find_random_available_ip(IPAddr.new(subnet))
     gateway_ip = find_random_available_ip(IPAddr.new(subnet))
 
